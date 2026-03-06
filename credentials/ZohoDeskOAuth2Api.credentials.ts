@@ -5,33 +5,54 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class ZohoDeskApi implements ICredentialType {
-	name = 'zohoDeskApi';
+export class ZohoDeskOAuth2Api implements ICredentialType {
+	name = 'zohoDeskOAuth2Api';
 
-	displayName = 'Zoho Desk API';
+	extends = ['oAuth2Api'];
+
+	displayName = 'Zoho Desk OAuth2 API';
 
 	documentationUrl = 'https://desk.zoho.com/DeskAPIDocument#Introduction';
 
 	properties: INodeProperties[] = [
 		{
-			displayName: 'Base URL',
-			name: 'baseUrl',
-			type: 'string',
-			default: 'https://desk.zoho.com',
-			required: true,
-			description:
-				'Zoho Desk domain for your region, for example https://desk.zoho.com or https://desk.zoho.eu',
+			displayName: 'Grant Type',
+			name: 'grantType',
+			type: 'hidden',
+			default: 'authorizationCode',
 		},
 		{
-			displayName: 'Access Token',
-			name: 'accessToken',
-			type: 'string',
-			default: '',
-			typeOptions: {
-				password: true,
-			},
-			required: true,
-			description: 'OAuth access token used in the Authorization header',
+			displayName: 'Zoho Data Center',
+			name: 'datacenter',
+			type: 'options',
+			default: 'com',
+			description: 'The data center where your Zoho Desk account is hosted',
+			options: [
+				{
+					name: 'zoho.com (US)',
+					value: 'com',
+				},
+				{
+					name: 'zoho.com.au (Australia)',
+					value: 'com.au',
+				},
+				{
+					name: 'zoho.com.cn (China)',
+					value: 'com.cn',
+				},
+				{
+					name: 'zoho.eu (EU)',
+					value: 'eu',
+				},
+				{
+					name: 'zoho.in (India)',
+					value: 'in',
+				},
+				{
+					name: 'zoho.jp (Japan)',
+					value: 'jp',
+				},
+			],
 		},
 		{
 			displayName: 'Organization ID',
@@ -39,23 +60,17 @@ export class ZohoDeskApi implements ICredentialType {
 			type: 'string',
 			default: '',
 			required: true,
-			description: 'Zoho Desk organization ID used in the orgId header',
+			description:
+				'Your Zoho Desk Organization ID. You can find this in Setup > Developer Space > API.',
 		},
 		{
 			displayName: 'Scopes',
 			name: 'scopes',
 			type: 'multiOptions',
 			required: true,
-			default: [
-				'Desk.tickets.READ',
-				'Desk.tickets.CREATE',
-				'Desk.tickets.UPDATE',
-				'Desk.contacts.READ',
-				'Desk.contacts.CREATE',
-				'Desk.contacts.UPDATE',
-			],
+			default: ['Desk.tickets.ALL', 'Desk.contacts.READ', 'Desk.contacts.WRITE', 'Desk.search.READ', 'Desk.basic.READ', 'Desk.settings.READ'],
 			description:
-				'Select the OAuth scopes configured for your token. The node validates selected scopes before executing operations',
+				'Select the OAuth scopes required by your workflows. You can select multiple scopes.',
 			options: [
 				{
 					name: 'Desk.tickets.ALL',
@@ -199,25 +214,61 @@ export class ZohoDeskApi implements ICredentialType {
 				},
 			],
 		},
+		{
+			displayName: 'Authorization URL',
+			name: 'authUrl',
+			type: 'hidden',
+			default: '=https://accounts.zoho.{{$self["datacenter"]}}/oauth/v2/auth',
+			required: true,
+		},
+		{
+			displayName: 'Access Token URL',
+			name: 'accessTokenUrl',
+			type: 'hidden',
+			default: '=https://accounts.zoho.{{$self["datacenter"]}}/oauth/v2/token',
+			required: true,
+		},
+		{
+			displayName: 'Base URL',
+			name: 'baseUrl',
+			type: 'hidden',
+			default: '=https://desk.zoho.{{$self["datacenter"]}}/api/v1',
+		},
+		{
+			displayName: 'Scope',
+			name: 'scope',
+			type: 'hidden',
+			default: '={{($self["scopes"] || []).join(" ")}}',
+		},
+		{
+			displayName: 'Auth URI Query Parameters',
+			name: 'authQueryParameters',
+			type: 'hidden',
+			default: 'access_type=offline&prompt=consent',
+		},
+		{
+			displayName: 'Authentication',
+			name: 'authentication',
+			type: 'hidden',
+			default: 'header',
+		},
 	];
+
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: '=https://desk.zoho.{{$credentials["datacenter"]}}/api/v1',
+			url: '/tickets?limit=1',
+			headers: {
+				orgId: '={{$credentials["orgId"]}}',
+			},
+		},
+	};
 
 	authenticate: IAuthenticateGeneric = {
 		type: 'generic',
 		properties: {
 			headers: {
-				Authorization: '=Zoho-oauthtoken {{$credentials.accessToken}}',
-				orgId: '={{$credentials.orgId}}',
-			},
-		},
-	};
-
-	test: ICredentialTestRequest = {
-		request: {
-			baseURL: '={{$credentials.baseUrl}}',
-			url: '/api/v1/tickets',
-			method: 'GET',
-			qs: {
-				limit: 1,
+				Authorization: '=Bearer {{$credentials.oauthTokenData.access_token}}',
 			},
 		},
 	};

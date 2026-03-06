@@ -18,7 +18,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "copy:assets": "mkdir -p dist/nodes/ZohoDesk && cp nodes/ZohoDesk/zohoDesk.svg dist/nodes/ZohoDesk/",
+    "copy:assets": "mkdir -p dist/nodes/ZohoDesk && cp nodes/ZohoDesk/*.svg nodes/ZohoDesk/*.png dist/nodes/ZohoDesk/ 2>/dev/null || true",
     "build": "npm run clean && tsc && npm run copy:assets",
     "dev": "tsc --watch",
     "lint": "eslint nodes credentials --ext .ts",
@@ -28,10 +28,11 @@
     "n8nNodesApiVersion": 1,
     "strict": true,
     "credentials": [
-      "dist/credentials/ZohoDeskApi.credentials.js"
+      "dist/credentials/ZohoDeskOAuth2Api.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/ZohoDesk/ZohoDesk.node.js"
+      "dist/nodes/ZohoDesk/ZohoDesk.node.js",
+      "dist/nodes/ZohoDesk/ZohoDeskTrigger.node.js"
     ]
   },
   "peerDependencies": {

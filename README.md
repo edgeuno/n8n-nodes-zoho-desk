@@ -1,42 +1,47 @@
 # n8n-nodes-zoho-desk-edgeuno
 
-Community n8n node for Zoho Desk API operations on tickets and contacts.
+Community n8n node for Zoho Desk automation with OAuth2 authentication, dynamic load options, and trigger support.
 
-## Supported Resources
+## Features
 
-- Ticket
-  - Create
-  - Get
-  - Get Many
-  - Update
-- Contact
-  - Create
-  - Get
-  - Get Many
-  - Update
+- OAuth2 credential for Zoho Desk with data center selection
+- Required multi-select OAuth scopes in credential setup
+- Ticket, Contact, and Account resources
+- Trigger node for new/updated tickets, contacts, and accounts
+- Dynamic Department and Team dropdowns
+- Support for pagination (`Return All`) and custom fields (`cf`)
+
+## Supported Operations
+
+- Ticket: `create`, `get`, `list`, `update`, `delete`, `addComment`, `listThreads`
+- Contact: `create`, `get`, `list`, `update`, `delete`
+- Account: `create`, `get`, `list`, `update`, `delete`
 
 ## Credentials
 
-Use `Zoho Desk API` credentials with:
+Use `Zoho Desk OAuth2 API` credentials:
 
-- `Base URL` (for example `https://desk.zoho.com`)
-- `Access Token` (OAuth token)
-- `Organization ID` (`orgId` header required by Zoho Desk APIs)
-- `Scopes` (select only scopes needed for the operations you run)
+- `Client ID` and `Client Secret` from Zoho API Console
+- `Zoho Data Center` (`com`, `eu`, `in`, `jp`, `com.au`, `com.cn`)
+- `Organization ID` (Zoho Desk Setup > Developer Space > API)
+- `Scopes` (multi-select, required)
 
-The node sends:
+This node requests OAuth scopes from your selected list and sends `orgId` in API headers.
 
-- `Authorization: Zoho-oauthtoken <token>`
-- `orgId: <organization_id>`
+## Nodes Included
+
+- `Zoho Desk` (regular node)
+- `Zoho Desk Trigger` (polling trigger)
 
 ## Local Development
 
 ```bash
 npm install
+npm run lint
 npm run build
 ```
 
-Link into local n8n:
+Link in local n8n:
 
 ```bash
 npm link
@@ -44,14 +49,7 @@ npm link
 npm link n8n-nodes-zoho-desk-edgeuno
 ```
 
-## Notes
-
-- Pagination uses Zoho Desk `from` + `limit`.
-- `Get Many` supports `Return All`.
-- JSON fields such as `cf` are passed directly to the API.
-- The node validates selected credential scopes before each operation.
-
 ## Source Documentation
 
-- n8n custom node build docs: https://docs.n8n.io/integrations/creating-nodes/build/
+- n8n node build docs: https://docs.n8n.io/integrations/creating-nodes/build/
 - Zoho Desk API docs: https://desk.zoho.com/DeskAPIDocument#Introduction
