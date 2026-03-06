@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-zoho-desk",
+  "name": "n8n-nodes-zoho-desk-edgeuno",
   "version": "0.1.0",
   "description": "n8n community node for Zoho Desk",
   "license": "MIT",
@@ -13,6 +13,9 @@
     "dist"
   ],
   "main": "dist/nodes/ZohoDesk/ZohoDesk.node.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "copy:assets": "mkdir -p dist/nodes/ZohoDesk && cp nodes/ZohoDesk/zohoDesk.svg dist/nodes/ZohoDesk/",

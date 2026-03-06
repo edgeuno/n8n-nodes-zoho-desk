@@ -1,4 +1,4 @@
-# n8n-nodes-zoho-desk
+# n8n-nodes-zoho-desk-edgeuno
 
 Community n8n node for Zoho Desk API operations on tickets and contacts.
 
@@ -22,6 +22,7 @@ Use `Zoho Desk API` credentials with:
 - `Base URL` (for example `https://desk.zoho.com`)
 - `Access Token` (OAuth token)
 - `Organization ID` (`orgId` header required by Zoho Desk APIs)
+- `Scopes` (select only scopes needed for the operations you run)
 
 The node sends:
 
@@ -40,7 +41,7 @@ Link into local n8n:
 ```bash
 npm link
 # in your n8n installation
-npm link n8n-nodes-zoho-desk
+npm link n8n-nodes-zoho-desk-edgeuno
 ```
 
 ## Notes
@@ -48,6 +49,7 @@ npm link n8n-nodes-zoho-desk
 - Pagination uses Zoho Desk `from` + `limit`.
 - `Get Many` supports `Return All`.
 - JSON fields such as `cf` are passed directly to the API.
+- The node validates selected credential scopes before each operation.
 
 ## Source Documentation
 

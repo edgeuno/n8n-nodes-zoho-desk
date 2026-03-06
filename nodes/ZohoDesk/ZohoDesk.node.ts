@@ -208,6 +208,76 @@ const contactIncludeOptions: INodeProperties = {
 	],
 };
 
+const defaultNodeScopes = [
+	'Desk.tickets.READ',
+	'Desk.tickets.CREATE',
+	'Desk.tickets.UPDATE',
+	'Desk.contacts.READ',
+	'Desk.contacts.CREATE',
+	'Desk.contacts.UPDATE',
+];
+
+const requiredScopesByOperation: Record<string, string[][]> = {
+	'ticket:get': [['Desk.tickets.ALL', 'Desk.tickets.READ']],
+	'ticket:getAll': [['Desk.tickets.ALL', 'Desk.tickets.READ']],
+	'ticket:create': [['Desk.tickets.ALL', 'Desk.tickets.WRITE', 'Desk.tickets.CREATE']],
+	'ticket:update': [['Desk.tickets.ALL', 'Desk.tickets.WRITE', 'Desk.tickets.UPDATE']],
+	'contact:get': [['Desk.contacts.READ']],
+	'contact:getAll': [['Desk.contacts.READ']],
+	'contact:create': [['Desk.contacts.WRITE', 'Desk.contacts.CREATE']],
+	'contact:update': [['Desk.contacts.WRITE', 'Desk.contacts.UPDATE']],
+};
+
+function normalizeCredentialScopes(scopes: unknown): string[] {
+	if (Array.isArray(scopes)) {
+		return scopes.filter((scope): scope is string => typeof scope === 'string' && scope.trim() !== '');
+	}
+
+	return [...defaultNodeScopes];
+}
+
+function validateScopesForOperation(
+	context: IExecuteFunctions,
+	itemIndex: number,
+	resource: string,
+	operation: string,
+	credentialScopes: string[],
+): void {
+	if (credentialScopes.length === 0) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Select at least one OAuth scope in the Zoho Desk credential.',
+			{ itemIndex },
+		);
+	}
+
+	const operationKey = `${resource}:${operation}`;
+	const scopeGroups = requiredScopesByOperation[operationKey];
+
+	if (!scopeGroups) {
+		return;
+	}
+
+	const selectedScopes = new Set(credentialScopes);
+	const hasAllRequiredScopes = scopeGroups.every((alternatives) =>
+		alternatives.some((scope) => selectedScopes.has(scope)),
+	);
+
+	if (hasAllRequiredScopes) {
+		return;
+	}
+
+	const requiredScopeText = scopeGroups
+		.map((alternatives) => alternatives.join(' or '))
+		.join(' and ');
+
+	throw new NodeOperationError(
+		context.getNode(),
+		`The selected OAuth scopes do not allow ${resource} ${operation}. Required: ${requiredScopeText}. Selected: ${credentialScopes.join(', ')}`,
+		{ itemIndex },
+	);
+}
+
 export class ZohoDesk implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Zoho Desk',
@@ -1027,11 +1097,15 @@ export class ZohoDesk implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
+		const credentials = await this.getCredentials('zohoDeskApi');
+		const credentialScopes = normalizeCredentialScopes(credentials.scopes);
 
 		for (let i = 0; i < items.length; i++) {
 			try {
 				const resource = this.getNodeParameter('resource', i) as string;
 				const operation = this.getNodeParameter('operation', i) as string;
+
+				validateScopesForOperation(this, i, resource, operation, credentialScopes);
 
 				let responseData: IDataObject | IDataObject[] = {};
 
