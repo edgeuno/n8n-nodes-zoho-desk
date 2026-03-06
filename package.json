@@ -1,0 +1,44 @@
+{
+  "name": "n8n-nodes-zoho-desk",
+  "version": "0.1.0",
+  "description": "n8n community node for Zoho Desk",
+  "license": "MIT",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "zoho",
+    "zoho desk"
+  ],
+  "files": [
+    "dist"
+  ],
+  "main": "dist/nodes/ZohoDesk/ZohoDesk.node.js",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "copy:assets": "mkdir -p dist/nodes/ZohoDesk && cp nodes/ZohoDesk/zohoDesk.svg dist/nodes/ZohoDesk/",
+    "build": "npm run clean && tsc && npm run copy:assets",
+    "dev": "tsc --watch",
+    "lint": "eslint nodes credentials --ext .ts",
+    "lintfix": "eslint nodes credentials --ext .ts --fix"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/ZohoDeskApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/ZohoDesk/ZohoDesk.node.js"
+    ]
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "^8.27.0",
+    "@types/node": "^20.17.24",
+    "eslint": "^9.27.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.0",
+    "typescript": "^5.8.2"
+  }
+}
