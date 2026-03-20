@@ -2,17 +2,11 @@ import type {
   IAllExecuteFunctions,
   IHttpRequestOptions,
   ILoadOptionsFunctions,
-  IOAuth2Options,
   IRequestOptions,
 } from 'n8n-workflow';
 
 const DEFAULT_ZOHO_DESK_DATACENTER = 'com';
 const ZOHO_DESK_API_VERSION = 'v1';
-
-const ZOHO_DESK_OAUTH2_OPTIONS: IOAuth2Options = {
-  tokenType: 'Zoho-oauthtoken',
-  keepBearer: false,
-};
 
 export function getZohoDeskApiBaseUrl(credentials: Record<string, unknown>): string {
   const configuredBaseUrl =
@@ -38,12 +32,7 @@ export async function zohoDeskApiRequest(
   context: IAllExecuteFunctions,
   requestOptions: IRequestOptions,
 ): Promise<any> {
-  return await context.helpers.requestOAuth2.call(
-    context,
-    'zohoDeskOAuth2Api',
-    requestOptions,
-    ZOHO_DESK_OAUTH2_OPTIONS,
-  );
+  return await context.helpers.requestOAuth2.call(context, 'zohoDeskOAuth2Api', requestOptions);
 }
 
 function getZohoDeskAccessToken(credentials: Record<string, unknown>): string {

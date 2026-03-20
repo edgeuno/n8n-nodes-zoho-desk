@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-zoho-desk-edgeuno",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "n8n community node for Zoho Desk",
   "author": "EdgeUno",
   "license": "MIT",

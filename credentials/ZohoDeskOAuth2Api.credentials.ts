@@ -268,7 +268,7 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				Authorization: '=Zoho-oauthtoken {{$credentials.oauthTokenData.access_token}}',
+				Authorization: '=Bearer {{$credentials.oauthTokenData.access_token}}',
 			},
 		},
 	};
