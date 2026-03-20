@@ -12,6 +12,7 @@ import {
   getZohoDeskApiBaseUrl,
   getZohoDeskLoadOptionsErrorMessage,
   zohoDeskApiRequest,
+  zohoDeskLoadOptionsRequest,
 } from './GenericFunctions';
 
 /**
@@ -177,11 +178,11 @@ export class ZohoDeskTrigger implements INodeType {
             headers: {
               orgId: orgId,
             },
-            uri: `${baseUrl}/departments`,
+            url: `${baseUrl}/departments`,
             json: true,
           };
 
-          const response = await zohoDeskApiRequest(this, options);
+          const response = await zohoDeskLoadOptionsRequest(this, credentials, options);
 
           if (
             !response ||

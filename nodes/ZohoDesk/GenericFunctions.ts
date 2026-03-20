@@ -1,5 +1,7 @@
 import type {
   IAllExecuteFunctions,
+  IHttpRequestOptions,
+  ILoadOptionsFunctions,
   IOAuth2Options,
   IRequestOptions,
 } from 'n8n-workflow';
@@ -42,6 +44,40 @@ export async function zohoDeskApiRequest(
     requestOptions,
     ZOHO_DESK_OAUTH2_OPTIONS,
   );
+}
+
+function getZohoDeskAccessToken(credentials: Record<string, unknown>): string {
+  const oauthTokenData =
+    typeof credentials.oauthTokenData === 'object' && credentials.oauthTokenData !== null
+      ? (credentials.oauthTokenData as Record<string, unknown>)
+      : undefined;
+
+  const accessToken = oauthTokenData?.access_token;
+
+  if (typeof accessToken !== 'string' || accessToken.trim() === '') {
+    throw new Error(
+      'Zoho Desk OAuth access token is missing from the credential. Reconnect the credential and try again.',
+    );
+  }
+
+  return accessToken.trim();
+}
+
+export async function zohoDeskLoadOptionsRequest(
+  context: ILoadOptionsFunctions,
+  credentials: Record<string, unknown>,
+  requestOptions: IHttpRequestOptions,
+): Promise<any> {
+  const accessToken = getZohoDeskAccessToken(credentials);
+  const headers = {
+    ...(requestOptions.headers ?? {}),
+    Authorization: `Zoho-oauthtoken ${accessToken}`,
+  };
+
+  return await context.helpers.httpRequest({
+    ...requestOptions,
+    headers,
+  });
 }
 
 function getErrorMessage(error: unknown): string {

@@ -13,6 +13,7 @@ import {
   getZohoDeskApiBaseUrl,
   getZohoDeskLoadOptionsErrorMessage,
   zohoDeskApiRequest,
+  zohoDeskLoadOptionsRequest,
 } from './GenericFunctions';
 
 /**
@@ -2354,11 +2355,11 @@ export class ZohoDesk implements INodeType {
             headers: {
               orgId: orgId,
             },
-            uri: `${baseUrl}/departments`,
+            url: `${baseUrl}/departments`,
             json: true,
           };
 
-          const response = await zohoDeskApiRequest(this, options);
+          const response = await zohoDeskLoadOptionsRequest(this, credentials, options);
 
           // Runtime validation of API response structure
           if (
@@ -2409,11 +2410,11 @@ export class ZohoDesk implements INodeType {
             headers: {
               orgId: orgId,
             },
-            uri: `${baseUrl}/departments/${encodeURIComponent(departmentId)}/teams`,
+            url: `${baseUrl}/departments/${encodeURIComponent(departmentId)}/teams`,
             json: true,
           };
 
-          const response = await zohoDeskApiRequest(this, options);
+          const response = await zohoDeskLoadOptionsRequest(this, credentials, options);
 
           // Runtime validation of API response structure with detailed error reporting
           // Note: Teams endpoint uses 'teams' property instead of 'data'
