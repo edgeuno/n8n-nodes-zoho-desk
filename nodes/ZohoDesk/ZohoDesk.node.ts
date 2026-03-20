@@ -146,8 +146,19 @@ const ZOHO_DESK_LIST_TICKETS_DOCS =
   'https://desk.zoho.com/support/APIDocument#Tickets#Tickets_ListAllTickets';
 const ZOHO_DESK_COMMENTS_DOCS = 'https://desk.zoho.com/support/APIDocument#TicketComments';
 const ZOHO_DESK_THREADS_DOCS = 'https://desk.zoho.com/support/APIDocument#TicketThreads';
+const ZOHO_DESK_TICKET_HISTORY_DOCS = 'https://desk.zoho.com/support/APIDocument#Activities';
 const ZOHO_DESK_CONTACTS_DOCS = 'https://desk.zoho.com/support/APIDocument#Contacts';
 const ZOHO_DESK_ACCOUNTS_DOCS = 'https://desk.zoho.com/support/APIDocument#Accounts';
+const ZOHO_DESK_TASKS_DOCS = 'https://desk.zoho.com/support/APIDocument#Tasks';
+const ZOHO_DESK_EVENTS_DOCS = 'https://desk.zoho.com/support/APIDocument#Events';
+
+const TASK_EVENT_FIELD_LIMITS = {
+  subject: 300,
+  category: 120,
+  status: 120,
+  priority: 120,
+  description: 65535,
+} as const;
 
 /**
  * Optional fields for contact create operation
@@ -306,6 +317,37 @@ function parseCustomFields(cf: unknown): IDataObject {
 }
 
 /**
+ * Parse a JSON array field with helpful validation errors
+ */
+function parseJsonArray(value: unknown, fieldName: string, docsUrl: string): unknown[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+
+    if (!Array.isArray(parsed)) {
+      throw new ApplicationError(
+        `${fieldName} must be a JSON array. ` +
+          `Please ensure your JSON is properly formatted, e.g., [{"type": "popup"}]. ` +
+          'See: ' +
+          docsUrl,
+      );
+    }
+
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('must be a JSON array')) {
+      throw error;
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ApplicationError(
+      `${fieldName} must be valid JSON. Parse error: ${errorMessage}. ` +
+        'See: ' +
+        docsUrl,
+    );
+  }
+}
+
+/**
  * Add optional fields to request body if they exist in source object
  * Removes CRLF characters from string fields to prevent header injection
  * @param body - Target object to add fields to
@@ -340,6 +382,150 @@ function addOptionalFields(
         body[field] = source[field];
       }
     }
+  }
+}
+
+/**
+ * Normalize list-style parameters to comma-separated strings
+ */
+function toCommaSeparatedValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => String(item).trim())
+      .filter((item) => item.length > 0);
+
+    return items.length > 0 ? items.join(',') : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed !== '' ? trimmed : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Add an optional ID field to the request body
+ */
+function addOptionalIdField(
+  body: IDataObject,
+  source: IDataObject,
+  field: string,
+  fieldName: string,
+): void {
+  const value = source[field];
+
+  if (value === undefined || value === null) {
+    return;
+  }
+
+  const stringValue = String(value).trim();
+  if (stringValue === '') {
+    return;
+  }
+
+  isValidZohoDeskId(stringValue, fieldName);
+  body[field] = stringValue;
+}
+
+/**
+ * Add an optional text field with documented length validation
+ */
+function addOptionalTextField(
+  body: IDataObject,
+  source: IDataObject,
+  field: keyof typeof TASK_EVENT_FIELD_LIMITS,
+  fieldName: string,
+): void {
+  const value = source[field];
+
+  if (typeof value !== 'string') {
+    return;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return;
+  }
+
+  body[field] = validateFieldLength(trimmed, TASK_EVENT_FIELD_LIMITS[field], fieldName);
+}
+
+/**
+ * Add an optional timestamp field in Zoho Desk's expected ISO format
+ */
+function addOptionalTimestampField(
+  body: IDataObject,
+  source: IDataObject,
+  field: 'dueDate' | 'startTime',
+  fieldName: string,
+  docsUrl: string,
+): void {
+  const value = source[field];
+
+  if (typeof value !== 'string') {
+    return;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return;
+  }
+
+  body[field] = convertDateToTimestamp(trimmed, fieldName, docsUrl);
+}
+
+/**
+ * Add an optional numeric field
+ */
+function addOptionalNumberField(
+  body: IDataObject,
+  source: IDataObject,
+  field: string,
+  fieldName: string,
+): void {
+  const value = source[field];
+
+  if (value === undefined || value === null || value === '') {
+    return;
+  }
+
+  const numericValue = typeof value === 'number' ? value : Number(value);
+
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    throw new ApplicationError(`${fieldName} must be a non-negative number.`);
+  }
+
+  body[field] = numericValue;
+}
+
+/**
+ * Add common task/event payload fields
+ */
+function addTaskOrEventFields(body: IDataObject, fields: IDataObject, docsUrl: string): void {
+  addOptionalIdField(body, fields, 'departmentId', 'Department ID');
+  addOptionalIdField(body, fields, 'contactId', 'Contact ID');
+  addOptionalIdField(body, fields, 'ownerId', 'Owner ID');
+  addOptionalIdField(body, fields, 'teamId', 'Team ID');
+  addOptionalIdField(body, fields, 'ticketId', 'Ticket ID');
+
+  addOptionalTextField(body, fields, 'subject', 'Subject');
+  addOptionalTextField(body, fields, 'category', 'Category');
+  addOptionalTextField(body, fields, 'status', 'Status');
+  addOptionalTextField(body, fields, 'priority', 'Priority');
+  addOptionalTextField(body, fields, 'description', 'Description');
+
+  addOptionalTimestampField(body, fields, 'dueDate', 'Due Date', docsUrl);
+  addOptionalTimestampField(body, fields, 'startTime', 'Start Time', docsUrl);
+  addOptionalNumberField(body, fields, 'duration', 'Duration');
+
+  if (fields.cf !== undefined && fields.cf !== '') {
+    body.cf = parseCustomFields(fields.cf);
+  }
+
+  if (fields.reminder !== undefined && fields.reminder !== '') {
+    body.reminder = parseJsonArray(fields.reminder, 'Reminder', docsUrl);
   }
 }
 
@@ -557,9 +743,10 @@ async function getAllPaginatedItems(
   limit: number,
   dataKey: string = 'data',
   queryParams?: IDataObject,
+  startFrom = 1,
 ): Promise<IDataObject[]> {
   const allItems: IDataObject[] = [];
-  let from = 1;
+  let from = startFrom;
   let hasMore = true;
 
   while (hasMore) {
@@ -723,7 +910,7 @@ export class ZohoDesk implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
-    description: 'Manage tickets, contacts, and accounts in Zoho Desk',
+    description: 'Manage tickets, contacts, accounts, tasks, and events in Zoho Desk',
     defaults: {
       name: 'Zoho Desk',
     },
@@ -749,6 +936,14 @@ export class ZohoDesk implements INodeType {
           {
             name: 'Contact',
             value: 'contact',
+          },
+          {
+            name: 'Event',
+            value: 'event',
+          },
+          {
+            name: 'Task',
+            value: 'task',
           },
           {
             name: 'Ticket',
@@ -798,6 +993,12 @@ export class ZohoDesk implements INodeType {
             value: 'list',
             description: 'List all tickets',
             action: 'List tickets',
+          },
+          {
+            name: 'List Activities',
+            value: 'listActivities',
+            description: 'List ticket activity history',
+            action: 'List ticket activities',
           },
           {
             name: 'List Threads',
@@ -900,6 +1101,84 @@ export class ZohoDesk implements INodeType {
             value: 'update',
             description: 'Update an account',
             action: 'Update an account',
+          },
+        ],
+        default: 'create',
+      },
+      // ==================== EVENT OPERATIONS ====================
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+          },
+        },
+        options: [
+          {
+            name: 'Create',
+            value: 'create',
+            description: 'Create a new event',
+            action: 'Create an event',
+          },
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Get an event by ID',
+            action: 'Get an event',
+          },
+          {
+            name: 'List',
+            value: 'list',
+            description: 'List events',
+            action: 'List events',
+          },
+          {
+            name: 'Update',
+            value: 'update',
+            description: 'Update an event',
+            action: 'Update an event',
+          },
+        ],
+        default: 'create',
+      },
+      // ==================== TASK OPERATIONS ====================
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['task'],
+          },
+        },
+        options: [
+          {
+            name: 'Create',
+            value: 'create',
+            description: 'Create a new task',
+            action: 'Create a task',
+          },
+          {
+            name: 'Get',
+            value: 'get',
+            description: 'Get a task by ID',
+            action: 'Get a task',
+          },
+          {
+            name: 'List',
+            value: 'list',
+            description: 'List tasks',
+            action: 'List tasks',
+          },
+          {
+            name: 'Update',
+            value: 'update',
+            description: 'Update a task',
+            action: 'Update a task',
           },
         ],
         default: 'create',
@@ -1242,7 +1521,7 @@ export class ZohoDesk implements INodeType {
           },
         ],
       },
-      // ==================== TICKET: GET/DELETE/UPDATE/ADDCOMMENT/LISTTHREADS ====================
+      // ==================== TICKET: GET/DELETE/UPDATE/ADDCOMMENT/LISTTHREADS/LISTACTIVITIES ====================
       {
         displayName: 'Ticket ID',
         name: 'ticketId',
@@ -1251,7 +1530,7 @@ export class ZohoDesk implements INodeType {
         displayOptions: {
           show: {
             resource: ['ticket'],
-            operation: ['get', 'delete', 'update', 'addComment', 'listThreads'],
+            operation: ['get', 'delete', 'update', 'addComment', 'listThreads', 'listActivities'],
           },
         },
         default: '',
@@ -1394,6 +1673,90 @@ export class ZohoDesk implements INodeType {
             type: 'string',
             default: '',
             description: 'Filter by status (e.g., Open, On Hold, Closed)',
+          },
+        ],
+      },
+      // ==================== TICKET: LIST ACTIVITIES ====================
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['ticket'],
+            operation: ['listActivities'],
+          },
+        },
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+      },
+      {
+        displayName: 'Limit',
+        name: 'limit',
+        type: 'number',
+        displayOptions: {
+          show: {
+            resource: ['ticket'],
+            operation: ['listActivities'],
+            returnAll: [false],
+          },
+        },
+        typeOptions: {
+          minValue: 1,
+        },
+        default: 50,
+        description: 'Max number of results to return',
+      },
+      {
+        displayName: 'Options',
+        name: 'options',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['ticket'],
+            operation: ['listActivities'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Agent ID',
+            name: 'agentId',
+            type: 'string',
+            default: '',
+            description: 'Filter activity history performed by a specific agent',
+          },
+          {
+            displayName: 'Event Filter',
+            name: 'eventFilter',
+            type: 'multiOptions',
+            default: [],
+            description: 'Filter the activity history by event type',
+            options: [
+              { name: 'Approval History', value: 'ApprovalHistory' },
+              { name: 'Assignment Rule History', value: 'AssignmentRuleHistory' },
+              { name: 'Attachment History', value: 'AttachmentHistory' },
+              { name: 'Blueprint History', value: 'BlueprintHistory' },
+              { name: 'Call History', value: 'CallHistory' },
+              { name: 'Comment History', value: 'CommentHistory' },
+              { name: 'Event History', value: 'EventHistory' },
+              { name: 'Macro History', value: 'MacroHistory' },
+              { name: 'Notification Rule History', value: 'NotificationRuleHistory' },
+              { name: 'Skill Related History', value: 'SkillRelatedHistory' },
+              { name: 'SLA History', value: 'SLAHistory' },
+              { name: 'Supervise History', value: 'SuperviseHistory' },
+              { name: 'Task History', value: 'TaskHistory' },
+              { name: 'Time Entry History', value: 'TimeEntryHistory' },
+              { name: 'Workflow History', value: 'WorkflowHistory' },
+            ],
+          },
+          {
+            displayName: 'Field Name',
+            name: 'fieldName',
+            type: 'string',
+            default: '',
+            description: 'Filter the history of a specific field by its API name',
           },
         ],
       },
@@ -2335,8 +2698,869 @@ export class ZohoDesk implements INodeType {
           },
         ],
       },
-    ],
-  };
+      // ==================== TASK PARAMETERS ====================
+      // Task: Create
+      {
+        displayName: 'Department ID',
+        name: 'departmentId',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'The department ID in which the task must be created',
+      },
+      {
+        displayName: 'Subject',
+        name: 'subject',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'Subject of the task',
+      },
+      {
+        displayName: 'Additional Fields',
+        name: 'additionalFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['create'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Category',
+            name: 'category',
+            type: 'string',
+            default: '',
+            description: 'Category of the task',
+          },
+          {
+            displayName: 'Contact ID',
+            name: 'contactId',
+            type: 'string',
+            default: '',
+            description: 'Contact associated with the task',
+          },
+          {
+            displayName: 'Custom Fields',
+            name: 'cf',
+            type: 'json',
+            default: '',
+            description: 'Custom fields as JSON object',
+            placeholder: '{"cf_field": "value"}',
+          },
+          {
+            displayName: 'Description',
+            name: 'description',
+            type: 'string',
+            typeOptions: {
+              rows: 4,
+            },
+            default: '',
+            description: 'Description of the task',
+          },
+          {
+            displayName: 'Due Date',
+            name: 'dueDate',
+            type: 'dateTime',
+            default: '',
+            description: 'Due date for completing the task',
+          },
+          {
+            displayName: 'Owner ID',
+            name: 'ownerId',
+            type: 'string',
+            default: '',
+            description: 'Agent ID assigned to the task',
+          },
+          {
+            displayName: 'Priority',
+            name: 'priority',
+            type: 'string',
+            default: '',
+            description: 'Priority of the task',
+          },
+          {
+            displayName: 'Reminder',
+            name: 'reminder',
+            type: 'json',
+            default: '',
+            description: 'Reminder payload as JSON array',
+            placeholder: '[{"type":"popup"}]',
+          },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'string',
+            default: '',
+            description: 'Status of the task',
+          },
+          {
+            displayName: 'Team ID',
+            name: 'teamId',
+            type: 'string',
+            default: '',
+            description: 'Team assigned to the task',
+          },
+          {
+            displayName: 'Ticket ID',
+            name: 'ticketId',
+            type: 'string',
+            default: '',
+            description: 'Ticket associated with the task',
+          },
+        ],
+      },
+      // Task: Get/Update
+      {
+        displayName: 'Task ID',
+        name: 'taskId',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['get', 'update'],
+          },
+        },
+        default: '',
+        description: 'The ID of the task',
+      },
+      {
+        displayName: 'Include',
+        name: 'include',
+        type: 'multiOptions',
+        default: [],
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['get'],
+          },
+        },
+        description: 'Additional related resources to include in the response',
+        options: [
+          { name: 'Assignee', value: 'assignee' },
+          { name: 'Contacts', value: 'contacts' },
+          { name: 'Creator', value: 'creator' },
+          { name: 'Teams', value: 'teams' },
+          { name: 'Tickets', value: 'tickets' },
+        ],
+      },
+      // Task: List
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['list'],
+          },
+        },
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+      },
+      {
+        displayName: 'Limit',
+        name: 'limit',
+        type: 'number',
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['list'],
+            returnAll: [false],
+          },
+        },
+        typeOptions: {
+          minValue: 1,
+        },
+        default: 50,
+        description: 'Max number of results to return',
+      },
+      {
+        displayName: 'Options',
+        name: 'options',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['list'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Assignee ID',
+            name: 'assignee',
+            type: 'string',
+            default: '',
+            description: 'Agent ID or comma-separated agent IDs',
+          },
+          {
+            displayName: 'Department ID',
+            name: 'departmentId',
+            type: 'string',
+            default: '',
+            description: 'Department from which the tasks must be fetched',
+          },
+          {
+            displayName: 'Department IDs',
+            name: 'departmentIds',
+            type: 'string',
+            default: '',
+            description: 'Comma-separated department IDs to query',
+          },
+          {
+            displayName: 'Due Date Filter',
+            name: 'dueDateFilter',
+            type: 'multiOptions',
+            default: [],
+            description: 'Filter tasks by due date bucket',
+            options: [
+              { name: 'Current Month', value: 'CurrentMonth' },
+              { name: 'Current Week', value: 'CurrentWeek' },
+              { name: 'Overdue', value: 'Overdue' },
+              { name: 'Today', value: 'Today' },
+              { name: 'Tomorrow', value: 'Tomorrow' },
+            ],
+          },
+          {
+            displayName: 'Include',
+            name: 'include',
+            type: 'multiOptions',
+            default: [],
+            description: 'Additional related resources to include in the response',
+            options: [
+              { name: 'Assignee', value: 'assignee' },
+              { name: 'Contacts', value: 'contacts' },
+              { name: 'Projects', value: 'projects' },
+              { name: 'Teams', value: 'teams' },
+              { name: 'Tickets', value: 'tickets' },
+            ],
+          },
+          {
+            displayName: 'Is Completed',
+            name: 'isCompleted',
+            type: 'boolean',
+            default: false,
+            description: 'Whether to return completed tasks',
+          },
+          {
+            displayName: 'Is Spam',
+            name: 'isSpam',
+            type: 'boolean',
+            default: false,
+            description: 'Whether to include spam tasks',
+          },
+          {
+            displayName: 'Sort By',
+            name: 'sortBy',
+            type: 'options',
+            default: '',
+            description: 'Field to sort tasks by',
+            options: [
+              { name: 'Created Time', value: 'createdTime' },
+              { name: 'Due Date', value: 'dueDate' },
+              { name: 'None', value: '' },
+            ],
+          },
+          {
+            displayName: 'Sort Order',
+            name: 'sortOrder',
+            type: 'options',
+            default: 'asc',
+            description: 'Sort order (ascending or descending)',
+            options: [
+              { name: 'Ascending', value: 'asc' },
+              { name: 'Descending', value: 'desc' },
+            ],
+          },
+          {
+            displayName: 'View ID',
+            name: 'viewId',
+            type: 'string',
+            default: '',
+            description: 'View ID to apply while fetching tasks',
+          },
+        ],
+      },
+      // Task: Update
+      {
+        displayName: 'Update Fields',
+        name: 'updateFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['task'],
+            operation: ['update'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Category',
+            name: 'category',
+            type: 'string',
+            default: '',
+            description: 'Category of the task',
+          },
+          {
+            displayName: 'Contact ID',
+            name: 'contactId',
+            type: 'string',
+            default: '',
+            description: 'Contact associated with the task',
+          },
+          {
+            displayName: 'Custom Fields',
+            name: 'cf',
+            type: 'json',
+            default: '',
+            description: 'Custom fields as JSON object',
+            placeholder: '{"cf_field": "value"}',
+          },
+          {
+            displayName: 'Department ID',
+            name: 'departmentId',
+            type: 'string',
+            default: '',
+            description: 'Department in which the task belongs',
+          },
+          {
+            displayName: 'Description',
+            name: 'description',
+            type: 'string',
+            typeOptions: {
+              rows: 4,
+            },
+            default: '',
+            description: 'Description of the task',
+          },
+          {
+            displayName: 'Due Date',
+            name: 'dueDate',
+            type: 'dateTime',
+            default: '',
+            description: 'Due date for completing the task',
+          },
+          {
+            displayName: 'Owner ID',
+            name: 'ownerId',
+            type: 'string',
+            default: '',
+            description: 'Agent ID assigned to the task',
+          },
+          {
+            displayName: 'Priority',
+            name: 'priority',
+            type: 'string',
+            default: '',
+            description: 'Priority of the task',
+          },
+          {
+            displayName: 'Reminder',
+            name: 'reminder',
+            type: 'json',
+            default: '',
+            description: 'Reminder payload as JSON array',
+            placeholder: '[{"type":"popup"}]',
+          },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'string',
+            default: '',
+            description: 'Status of the task',
+          },
+          {
+            displayName: 'Subject',
+            name: 'subject',
+            type: 'string',
+            default: '',
+            description: 'Subject of the task',
+          },
+          {
+            displayName: 'Team ID',
+            name: 'teamId',
+            type: 'string',
+            default: '',
+            description: 'Team assigned to the task',
+          },
+          {
+            displayName: 'Ticket ID',
+            name: 'ticketId',
+            type: 'string',
+            default: '',
+            description: 'Ticket associated with the task',
+          },
+        ],
+      },
+      // ==================== EVENT PARAMETERS ====================
+      // Event: Create
+      {
+        displayName: 'Department ID',
+        name: 'departmentId',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'The department ID in which the event must be created',
+      },
+      {
+        displayName: 'Contact ID',
+        name: 'contactId',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'The contact ID associated with the event',
+      },
+      {
+        displayName: 'Subject',
+        name: 'subject',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'Subject of the event',
+      },
+      {
+        displayName: 'Start Time',
+        name: 'startTime',
+        type: 'dateTime',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        default: '',
+        description: 'Start time of the event',
+      },
+      {
+        displayName: 'Duration',
+        name: 'duration',
+        type: 'number',
+        required: true,
+        typeOptions: {
+          minValue: 0,
+        },
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        default: 0,
+        description: 'Duration of the event',
+      },
+      {
+        displayName: 'Additional Fields',
+        name: 'additionalFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['create'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Category',
+            name: 'category',
+            type: 'string',
+            default: '',
+            description: 'Category of the event',
+          },
+          {
+            displayName: 'Custom Fields',
+            name: 'cf',
+            type: 'json',
+            default: '',
+            description: 'Custom fields as JSON object',
+            placeholder: '{"cf_field": "value"}',
+          },
+          {
+            displayName: 'Description',
+            name: 'description',
+            type: 'string',
+            typeOptions: {
+              rows: 4,
+            },
+            default: '',
+            description: 'Description of the event',
+          },
+          {
+            displayName: 'Owner ID',
+            name: 'ownerId',
+            type: 'string',
+            default: '',
+            description: 'Agent ID assigned to the event',
+          },
+          {
+            displayName: 'Priority',
+            name: 'priority',
+            type: 'string',
+            default: '',
+            description: 'Priority of the event',
+          },
+          {
+            displayName: 'Reminder',
+            name: 'reminder',
+            type: 'json',
+            default: '',
+            description: 'Reminder payload as JSON array',
+            placeholder: '[{"type":"popup"}]',
+          },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'string',
+            default: '',
+            description: 'Status of the event',
+          },
+          {
+            displayName: 'Team ID',
+            name: 'teamId',
+            type: 'string',
+            default: '',
+            description: 'Team assigned to the event',
+          },
+          {
+            displayName: 'Ticket ID',
+            name: 'ticketId',
+            type: 'string',
+            default: '',
+            description: 'Ticket associated with the event',
+          },
+        ],
+      },
+      // Event: Get/Update
+      {
+        displayName: 'Event ID',
+        name: 'eventId',
+        type: 'string',
+        required: true,
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['get', 'update'],
+          },
+        },
+        default: '',
+        description: 'The ID of the event',
+      },
+      {
+        displayName: 'Include',
+        name: 'include',
+        type: 'multiOptions',
+        default: [],
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['get'],
+          },
+        },
+        description: 'Additional related resources to include in the response',
+        options: [
+          { name: 'Assignee', value: 'assignee' },
+          { name: 'Contacts', value: 'contacts' },
+          { name: 'Creator', value: 'creator' },
+          { name: 'Integ Info', value: 'integInfo' },
+          { name: 'Teams', value: 'teams' },
+          { name: 'Tickets', value: 'tickets' },
+        ],
+      },
+      // Event: List
+      {
+        displayName: 'Return All',
+        name: 'returnAll',
+        type: 'boolean',
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['list'],
+          },
+        },
+        default: false,
+        description: 'Whether to return all results or only up to a given limit',
+      },
+      {
+        displayName: 'Limit',
+        name: 'limit',
+        type: 'number',
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['list'],
+            returnAll: [false],
+          },
+        },
+        typeOptions: {
+          minValue: 1,
+        },
+        default: 50,
+        description: 'Max number of results to return',
+      },
+      {
+        displayName: 'Options',
+        name: 'options',
+        type: 'collection',
+        placeholder: 'Add Option',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['list'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Assignee ID',
+            name: 'assignee',
+            type: 'string',
+            default: '',
+            description: 'Agent ID or comma-separated agent IDs',
+          },
+          {
+            displayName: 'Department ID',
+            name: 'departmentId',
+            type: 'string',
+            default: '',
+            description: 'Department from which the events must be fetched',
+          },
+          {
+            displayName: 'Department IDs',
+            name: 'departmentIds',
+            type: 'string',
+            default: '',
+            description: 'Comma-separated department IDs to query',
+          },
+          {
+            displayName: 'Include',
+            name: 'include',
+            type: 'multiOptions',
+            default: [],
+            description: 'Additional related resources to include in the response',
+            options: [
+              { name: 'Assignee', value: 'assignee' },
+              { name: 'Contacts', value: 'contacts' },
+              { name: 'Integ Info', value: 'integInfo' },
+              { name: 'Teams', value: 'teams' },
+              { name: 'Tickets', value: 'tickets' },
+            ],
+          },
+          {
+            displayName: 'Is Completed',
+            name: 'isCompleted',
+            type: 'boolean',
+            default: false,
+            description: 'Whether to return completed events',
+          },
+          {
+            displayName: 'Sort By',
+            name: 'sortBy',
+            type: 'options',
+            default: '',
+            description: 'Field to sort events by',
+            options: [
+              { name: 'Created Time', value: 'createdTime' },
+              { name: 'None', value: '' },
+              { name: 'Start Time', value: 'startTime' },
+            ],
+          },
+          {
+            displayName: 'Sort Order',
+            name: 'sortOrder',
+            type: 'options',
+            default: 'asc',
+            description: 'Sort order (ascending or descending)',
+            options: [
+              { name: 'Ascending', value: 'asc' },
+              { name: 'Descending', value: 'desc' },
+            ],
+          },
+          {
+            displayName: 'Start Time Filter',
+            name: 'startTimeFilter',
+            type: 'multiOptions',
+            default: [],
+            description: 'Filter events by start-time bucket',
+            options: [
+              { name: 'Current Month', value: 'CurrentMonth' },
+              { name: 'Current Week', value: 'CurrentWeek' },
+              { name: 'Overdue', value: 'Overdue' },
+              { name: 'Today', value: 'Today' },
+              { name: 'Tomorrow', value: 'Tomorrow' },
+            ],
+          },
+          {
+            displayName: 'View ID',
+            name: 'viewId',
+            type: 'string',
+            default: '',
+            description: 'View ID to apply while fetching events',
+          },
+        ],
+      },
+      // Event: Update
+      {
+        displayName: 'Update Fields',
+        name: 'updateFields',
+        type: 'collection',
+        placeholder: 'Add Field',
+        default: {},
+        displayOptions: {
+          show: {
+            resource: ['event'],
+            operation: ['update'],
+          },
+        },
+        options: [
+          {
+            displayName: 'Category',
+            name: 'category',
+            type: 'string',
+            default: '',
+            description: 'Category of the event',
+          },
+          {
+            displayName: 'Contact ID',
+            name: 'contactId',
+            type: 'string',
+            default: '',
+            description: 'Contact associated with the event',
+          },
+          {
+            displayName: 'Custom Fields',
+            name: 'cf',
+            type: 'json',
+            default: '',
+            description: 'Custom fields as JSON object',
+            placeholder: '{"cf_field": "value"}',
+          },
+          {
+            displayName: 'Department ID',
+            name: 'departmentId',
+            type: 'string',
+            default: '',
+            description: 'Department in which the event belongs',
+          },
+          {
+            displayName: 'Description',
+            name: 'description',
+            type: 'string',
+            typeOptions: {
+              rows: 4,
+            },
+            default: '',
+            description: 'Description of the event',
+          },
+          {
+            displayName: 'Duration',
+            name: 'duration',
+            type: 'number',
+            typeOptions: {
+              minValue: 0,
+            },
+            default: 0,
+            description: 'Duration of the event',
+          },
+          {
+            displayName: 'Owner ID',
+            name: 'ownerId',
+            type: 'string',
+            default: '',
+            description: 'Agent ID assigned to the event',
+          },
+          {
+            displayName: 'Priority',
+            name: 'priority',
+            type: 'string',
+            default: '',
+            description: 'Priority of the event',
+          },
+          {
+            displayName: 'Reminder',
+            name: 'reminder',
+            type: 'json',
+            default: '',
+            description: 'Reminder payload as JSON array',
+            placeholder: '[{"type":"popup"}]',
+          },
+          {
+            displayName: 'Start Time',
+            name: 'startTime',
+            type: 'dateTime',
+            default: '',
+            description: 'Start time of the event',
+          },
+          {
+            displayName: 'Status',
+            name: 'status',
+            type: 'string',
+            default: '',
+            description: 'Status of the event',
+          },
+          {
+            displayName: 'Subject',
+            name: 'subject',
+            type: 'string',
+            default: '',
+            description: 'Subject of the event',
+          },
+          {
+            displayName: 'Team ID',
+            name: 'teamId',
+            type: 'string',
+            default: '',
+            description: 'Team assigned to the event',
+          },
+          {
+            displayName: 'Ticket ID',
+            name: 'ticketId',
+            type: 'string',
+            default: '',
+            description: 'Ticket associated with the event',
+          },
+        ],
+      },
+      ],
+    };
 
   methods = {
     loadOptions: {
@@ -2826,6 +4050,77 @@ export class ZohoDesk implements INodeType {
             }
           }
 
+          if (operation === 'listActivities') {
+            const ticketId = this.getNodeParameter('ticketId', i) as string;
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const activityOptions = this.getNodeParameter('options', i) as IDataObject;
+
+            if (!isValidTicketId(ticketId)) {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Invalid ticket ID format: "${ticketId}". Ticket ID must be a numeric value. ` +
+                  'See: ' +
+                  ZOHO_DESK_TICKET_HISTORY_DOCS,
+              );
+            }
+
+            const queryParams: IDataObject = {};
+
+            if (
+              typeof activityOptions.agentId === 'string' &&
+              activityOptions.agentId.trim() !== ''
+            ) {
+              isValidZohoDeskId(activityOptions.agentId, 'Agent ID');
+              queryParams.agentId = activityOptions.agentId.trim();
+            }
+
+            if (
+              typeof activityOptions.fieldName === 'string' &&
+              activityOptions.fieldName.trim() !== ''
+            ) {
+              queryParams.fieldName = activityOptions.fieldName.trim();
+            }
+
+            const eventFilter = toCommaSeparatedValue(activityOptions.eventFilter);
+            if (eventFilter) {
+              queryParams.eventFilter = eventFilter;
+            }
+
+            let activities: IDataObject[] = [];
+
+            if (returnAll) {
+              activities = await getAllPaginatedItems(
+                this,
+                baseUrl,
+                `/tickets/${encodeURIComponent(ticketId)}/History`,
+                orgId,
+                50,
+                'data',
+                queryParams,
+                0,
+              );
+            } else {
+              const limit = Math.min((this.getNodeParameter('limit', i) as number) || 50, 50);
+              const options = {
+                method: 'GET' as const,
+                headers: { orgId },
+                uri: `${baseUrl}/tickets/${encodeURIComponent(ticketId)}/History`,
+                qs: { from: 0, limit, ...queryParams },
+                json: true,
+              };
+
+              const response = await zohoDeskApiRequest(this, options);
+              activities = (response.data as IDataObject[]) || [];
+            }
+
+            for (const activity of activities) {
+              returnData.push({
+                json: activity,
+                pairedItem: { item: i },
+              });
+            }
+          }
+
           if (operation === 'delete') {
             const ticketId = this.getNodeParameter('ticketId', i) as string;
 
@@ -2970,6 +4265,388 @@ export class ZohoDesk implements INodeType {
                 pairedItem: { item: i },
               });
             }
+          }
+        }
+
+        // ==================== TASK RESOURCE ====================
+        if (resource === 'task') {
+          if (operation === 'create') {
+            const departmentId = this.getNodeParameter('departmentId', i) as string;
+            const subject = this.getNodeParameter('subject', i) as string;
+            const additionalFields = this.getNodeParameter('additionalFields', i) as IDataObject;
+
+            const taskFields: IDataObject = {
+              departmentId,
+              subject,
+              ...additionalFields,
+            };
+            const body: IDataObject = {};
+
+            addTaskOrEventFields(body, taskFields, ZOHO_DESK_TASKS_DOCS);
+
+            if (typeof body.departmentId !== 'string' || body.departmentId === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Department ID is required. See: ${ZOHO_DESK_TASKS_DOCS}`,
+              );
+            }
+
+            if (typeof body.subject !== 'string' || body.subject === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Subject is required. See: ${ZOHO_DESK_TASKS_DOCS}`,
+              );
+            }
+
+            const options = {
+              method: 'POST' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/tasks`,
+              body,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+
+          if (operation === 'get') {
+            const taskId = this.getNodeParameter('taskId', i) as string;
+            const include = toCommaSeparatedValue(this.getNodeParameter('include', i));
+
+            isValidZohoDeskId(taskId, 'Task ID');
+
+            const qs: IDataObject = {};
+            if (include) {
+              qs.include = include;
+            }
+
+            const options = {
+              method: 'GET' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/tasks/${encodeURIComponent(taskId)}`,
+              qs,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+
+          if (operation === 'list') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const listOptions = this.getNodeParameter('options', i) as IDataObject;
+            const queryParams: IDataObject = {};
+
+            if (typeof listOptions.departmentId === 'string' && listOptions.departmentId.trim() !== '') {
+              queryParams.departmentId = listOptions.departmentId.trim();
+            }
+            if (
+              typeof listOptions.departmentIds === 'string' &&
+              listOptions.departmentIds.trim() !== ''
+            ) {
+              queryParams.departmentIds = listOptions.departmentIds.trim();
+            }
+            if (typeof listOptions.viewId === 'string' && listOptions.viewId.trim() !== '') {
+              queryParams.viewId = listOptions.viewId.trim();
+            }
+            if (typeof listOptions.assignee === 'string' && listOptions.assignee.trim() !== '') {
+              queryParams.assignee = listOptions.assignee.trim();
+            }
+
+            const include = toCommaSeparatedValue(listOptions.include);
+            if (include) {
+              queryParams.include = include;
+            }
+
+            const dueDateFilter = toCommaSeparatedValue(listOptions.dueDateFilter);
+            if (dueDateFilter) {
+              queryParams.dueDate = dueDateFilter;
+            }
+
+            if (listOptions.isCompleted !== undefined) {
+              queryParams.isCompleted = listOptions.isCompleted;
+            }
+            if (listOptions.isSpam !== undefined) {
+              queryParams.isSpam = listOptions.isSpam;
+            }
+            if (listOptions.sortBy) {
+              const sortOrder = listOptions.sortOrder === 'desc' ? '-' : '';
+              queryParams.sortBy = `${sortOrder}${listOptions.sortBy}`;
+            }
+
+            if (returnAll) {
+              const tasks = await getAllPaginatedItems(
+                this,
+                baseUrl,
+                '/tasks',
+                orgId,
+                100,
+                'data',
+                queryParams,
+              );
+
+              for (const task of tasks) {
+                returnData.push({
+                  json: task,
+                  pairedItem: { item: i },
+                });
+              }
+            } else {
+              const limit = this.getNodeParameter('limit', i) as number;
+              const options = {
+                method: 'GET' as const,
+                headers: { orgId },
+                uri: `${baseUrl}/tasks`,
+                qs: { from: 1, limit, ...queryParams },
+                json: true,
+              };
+
+              const response = await zohoDeskApiRequest(this, options);
+
+              for (const task of (response.data as IDataObject[]) || []) {
+                returnData.push({
+                  json: task,
+                  pairedItem: { item: i },
+                });
+              }
+            }
+          }
+
+          if (operation === 'update') {
+            const taskId = this.getNodeParameter('taskId', i) as string;
+            const updateFields = this.getNodeParameter('updateFields', i) as IDataObject;
+
+            isValidZohoDeskId(taskId, 'Task ID');
+
+            const body: IDataObject = {};
+            addTaskOrEventFields(body, updateFields, ZOHO_DESK_TASKS_DOCS);
+
+            const options = {
+              method: 'PATCH' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/tasks/${encodeURIComponent(taskId)}`,
+              body,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+        }
+
+        // ==================== EVENT RESOURCE ====================
+        if (resource === 'event') {
+          if (operation === 'create') {
+            const departmentId = this.getNodeParameter('departmentId', i) as string;
+            const contactId = this.getNodeParameter('contactId', i) as string;
+            const subject = this.getNodeParameter('subject', i) as string;
+            const startTime = this.getNodeParameter('startTime', i) as string;
+            const duration = this.getNodeParameter('duration', i) as number;
+            const additionalFields = this.getNodeParameter('additionalFields', i) as IDataObject;
+
+            const eventFields: IDataObject = {
+              departmentId,
+              contactId,
+              subject,
+              startTime,
+              duration,
+              ...additionalFields,
+            };
+            const body: IDataObject = {};
+
+            addTaskOrEventFields(body, eventFields, ZOHO_DESK_EVENTS_DOCS);
+
+            if (typeof body.departmentId !== 'string' || body.departmentId === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Department ID is required. See: ${ZOHO_DESK_EVENTS_DOCS}`,
+              );
+            }
+
+            if (typeof body.contactId !== 'string' || body.contactId === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Contact ID is required. See: ${ZOHO_DESK_EVENTS_DOCS}`,
+              );
+            }
+
+            if (typeof body.subject !== 'string' || body.subject === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Subject is required. See: ${ZOHO_DESK_EVENTS_DOCS}`,
+              );
+            }
+
+            if (typeof body.startTime !== 'string' || body.startTime === '') {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Start Time is required. See: ${ZOHO_DESK_EVENTS_DOCS}`,
+              );
+            }
+
+            if (typeof body.duration !== 'number' || body.duration <= 0) {
+              throw new NodeOperationError(
+                this.getNode(),
+                `Duration must be greater than zero. See: ${ZOHO_DESK_EVENTS_DOCS}`,
+              );
+            }
+
+            const options = {
+              method: 'POST' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/events`,
+              body,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+
+          if (operation === 'get') {
+            const eventId = this.getNodeParameter('eventId', i) as string;
+            const include = toCommaSeparatedValue(this.getNodeParameter('include', i));
+
+            isValidZohoDeskId(eventId, 'Event ID');
+
+            const qs: IDataObject = {};
+            if (include) {
+              qs.include = include;
+            }
+
+            const options = {
+              method: 'GET' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/events/${encodeURIComponent(eventId)}`,
+              qs,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
+          }
+
+          if (operation === 'list') {
+            const returnAll = this.getNodeParameter('returnAll', i) as boolean;
+            const listOptions = this.getNodeParameter('options', i) as IDataObject;
+            const queryParams: IDataObject = {};
+
+            if (typeof listOptions.departmentId === 'string' && listOptions.departmentId.trim() !== '') {
+              queryParams.departmentId = listOptions.departmentId.trim();
+            }
+            if (
+              typeof listOptions.departmentIds === 'string' &&
+              listOptions.departmentIds.trim() !== ''
+            ) {
+              queryParams.departmentIds = listOptions.departmentIds.trim();
+            }
+            if (typeof listOptions.viewId === 'string' && listOptions.viewId.trim() !== '') {
+              queryParams.viewId = listOptions.viewId.trim();
+            }
+            if (typeof listOptions.assignee === 'string' && listOptions.assignee.trim() !== '') {
+              queryParams.assignee = listOptions.assignee.trim();
+            }
+
+            const include = toCommaSeparatedValue(listOptions.include);
+            if (include) {
+              queryParams.include = include;
+            }
+
+            const startTimeFilter = toCommaSeparatedValue(listOptions.startTimeFilter);
+            if (startTimeFilter) {
+              queryParams.startTime = startTimeFilter;
+            }
+
+            if (listOptions.isCompleted !== undefined) {
+              queryParams.isCompleted = listOptions.isCompleted;
+            }
+            if (listOptions.sortBy) {
+              const sortOrder = listOptions.sortOrder === 'desc' ? '-' : '';
+              queryParams.sortBy = `${sortOrder}${listOptions.sortBy}`;
+            }
+
+            if (returnAll) {
+              const events = await getAllPaginatedItems(
+                this,
+                baseUrl,
+                '/events',
+                orgId,
+                100,
+                'data',
+                queryParams,
+              );
+
+              for (const event of events) {
+                returnData.push({
+                  json: event,
+                  pairedItem: { item: i },
+                });
+              }
+            } else {
+              const limit = this.getNodeParameter('limit', i) as number;
+              const options = {
+                method: 'GET' as const,
+                headers: { orgId },
+                uri: `${baseUrl}/events`,
+                qs: { from: 1, limit, ...queryParams },
+                json: true,
+              };
+
+              const response = await zohoDeskApiRequest(this, options);
+
+              for (const event of (response.data as IDataObject[]) || []) {
+                returnData.push({
+                  json: event,
+                  pairedItem: { item: i },
+                });
+              }
+            }
+          }
+
+          if (operation === 'update') {
+            const eventId = this.getNodeParameter('eventId', i) as string;
+            const updateFields = this.getNodeParameter('updateFields', i) as IDataObject;
+
+            isValidZohoDeskId(eventId, 'Event ID');
+
+            const body: IDataObject = {};
+            addTaskOrEventFields(body, updateFields, ZOHO_DESK_EVENTS_DOCS);
+
+            const options = {
+              method: 'PATCH' as const,
+              headers: { orgId },
+              uri: `${baseUrl}/events/${encodeURIComponent(eventId)}`,
+              body,
+              json: true,
+            };
+
+            const response = await zohoDeskApiRequest(this, options);
+
+            returnData.push({
+              json: response,
+              pairedItem: { item: i },
+            });
           }
         }
 

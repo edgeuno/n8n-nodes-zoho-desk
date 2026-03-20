@@ -68,9 +68,25 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 			name: 'scopes',
 			type: 'multiOptions',
 			required: true,
-			default: ['Desk.tickets.ALL', 'Desk.contacts.READ', 'Desk.contacts.WRITE', 'Desk.search.READ', 'Desk.basic.READ', 'Desk.settings.READ'],
+			default: [
+				'Desk.tickets.ALL',
+				'Desk.contacts.READ',
+				'Desk.contacts.WRITE',
+				'Desk.search.READ',
+				'Desk.basic.READ',
+				'Desk.settings.READ',
+				'Desk.activities.READ',
+				'Desk.activities.CREATE',
+				'Desk.activities.UPDATE',
+				'Desk.activities.tasks.READ',
+				'Desk.activities.tasks.CREATE',
+				'Desk.activities.tasks.UPDATE',
+				'Desk.activities.events.READ',
+				'Desk.activities.events.CREATE',
+				'Desk.activities.events.UPDATE',
+			],
 			description:
-				'Select the OAuth scopes required by your workflows. Include Desk.basic.READ or Desk.settings.READ to load departments and teams.',
+				'Select the OAuth scopes required by your workflows. Include Desk.basic.READ or Desk.settings.READ to load departments and teams. Include Desk.activities.*, Desk.activities.tasks.*, and Desk.activities.events.* for task and event operations.',
 			options: [
 				{
 					name: 'Desk.tickets.ALL',
@@ -111,6 +127,30 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 				{
 					name: 'Desk.contacts.CREATE',
 					value: 'Desk.contacts.CREATE',
+				},
+				{
+					name: 'Desk.activities.READ',
+					value: 'Desk.activities.READ',
+				},
+				{
+					name: 'Desk.activities.CREATE',
+					value: 'Desk.activities.CREATE',
+				},
+				{
+					name: 'Desk.activities.UPDATE',
+					value: 'Desk.activities.UPDATE',
+				},
+				{
+					name: 'Desk.activities.tasks.READ',
+					value: 'Desk.activities.tasks.READ',
+				},
+				{
+					name: 'Desk.activities.tasks.CREATE',
+					value: 'Desk.activities.tasks.CREATE',
+				},
+				{
+					name: 'Desk.activities.tasks.UPDATE',
+					value: 'Desk.activities.tasks.UPDATE',
 				},
 				{
 					name: 'Desk.tasks.ALL',
@@ -171,6 +211,18 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 				{
 					name: 'Desk.search.READ',
 					value: 'Desk.search.READ',
+				},
+				{
+					name: 'Desk.activities.events.READ',
+					value: 'Desk.activities.events.READ',
+				},
+				{
+					name: 'Desk.activities.events.CREATE',
+					value: 'Desk.activities.events.CREATE',
+				},
+				{
+					name: 'Desk.activities.events.UPDATE',
+					value: 'Desk.activities.events.UPDATE',
 				},
 				{
 					name: 'Desk.events.ALL',
