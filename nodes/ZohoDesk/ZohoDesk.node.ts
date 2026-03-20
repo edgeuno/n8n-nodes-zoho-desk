@@ -9,6 +9,11 @@ import {
   INodePropertyOptions,
   NodeOperationError,
 } from 'n8n-workflow';
+import {
+  getZohoDeskApiBaseUrl,
+  getZohoDeskLoadOptionsErrorMessage,
+  zohoDeskApiRequest,
+} from './GenericFunctions';
 
 /**
  * Zoho Desk Department response structure
@@ -103,16 +108,6 @@ const MIN_TICKET_ID_LENGTH = 10;
  * Default status for new tickets
  */
 const DEFAULT_TICKET_STATUS = 'Open';
-
-/**
- * Zoho Desk API version
- */
-const ZOHO_DESK_API_VERSION = 'v1';
-
-/**
- * Default base URL for Zoho Desk API
- */
-const DEFAULT_BASE_URL = `https://desk.zoho.com/api/${ZOHO_DESK_API_VERSION}`;
 
 /**
  * Field length limits with documented standards.
@@ -575,11 +570,7 @@ async function getAllPaginatedItems(
       json: true,
     };
 
-    const response = await context.helpers.requestOAuth2.call(
-      context,
-      'zohoDeskOAuth2Api',
-      options,
-    );
+    const response = await zohoDeskApiRequest(context, options);
 
     const items = (response[dataKey] as IDataObject[]) || [];
     allItems.push(...items);
@@ -2356,7 +2347,7 @@ export class ZohoDesk implements INodeType {
         try {
           const credentials = await this.getCredentials('zohoDeskOAuth2Api');
           const orgId = credentials.orgId as string;
-          const baseUrl = (credentials.baseUrl as string | undefined) || DEFAULT_BASE_URL;
+          const baseUrl = getZohoDeskApiBaseUrl(credentials);
 
           const options = {
             method: 'GET' as const,
@@ -2367,11 +2358,7 @@ export class ZohoDesk implements INodeType {
             json: true,
           };
 
-          const response = await this.helpers.requestOAuth2.call(
-            this,
-            'zohoDeskOAuth2Api',
-            options,
-          );
+          const response = await zohoDeskApiRequest(this, options);
 
           // Runtime validation of API response structure
           if (
@@ -2391,7 +2378,7 @@ export class ZohoDesk implements INodeType {
           }));
         } catch (error) {
           // Return error option in dropdown so users can see what went wrong
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = getZohoDeskLoadOptionsErrorMessage(error, 'departments');
           return [
             {
               name: `⚠️ Error loading departments: ${errorMessage}`,
@@ -2409,7 +2396,7 @@ export class ZohoDesk implements INodeType {
         try {
           const credentials = await this.getCredentials('zohoDeskOAuth2Api');
           const orgId = credentials.orgId as string;
-          const baseUrl = (credentials.baseUrl as string | undefined) || DEFAULT_BASE_URL;
+          const baseUrl = getZohoDeskApiBaseUrl(credentials);
           const departmentId = this.getCurrentNodeParameter('departmentId');
 
           // Type guard: departmentId is optional in update operation
@@ -2426,11 +2413,7 @@ export class ZohoDesk implements INodeType {
             json: true,
           };
 
-          const response = await this.helpers.requestOAuth2.call(
-            this,
-            'zohoDeskOAuth2Api',
-            options,
-          );
+          const response = await zohoDeskApiRequest(this, options);
 
           // Runtime validation of API response structure with detailed error reporting
           // Note: Teams endpoint uses 'teams' property instead of 'data'
@@ -2464,7 +2447,7 @@ export class ZohoDesk implements INodeType {
           }));
         } catch (error) {
           // Return error option in dropdown so users can see what went wrong
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = getZohoDeskLoadOptionsErrorMessage(error, 'teams');
           return [
             {
               name: `⚠️ Error loading teams: ${errorMessage}`,
@@ -2485,7 +2468,7 @@ export class ZohoDesk implements INodeType {
     // Fetch credentials once for all items (optimization)
     const credentials = await this.getCredentials('zohoDeskOAuth2Api');
     const orgId = credentials.orgId as string;
-    const baseUrl = (credentials.baseUrl as string | undefined) || DEFAULT_BASE_URL;
+    const baseUrl = getZohoDeskApiBaseUrl(credentials);
 
     for (let i = 0; i < items.length; i++) {
       try {
@@ -2610,11 +2593,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -2661,11 +2640,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -2692,11 +2667,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -2829,11 +2800,7 @@ export class ZohoDesk implements INodeType {
                   json: true,
                 };
 
-                const response = await this.helpers.requestOAuth2.call(
-                  this,
-                  'zohoDeskOAuth2Api',
-                  options,
-                );
+                const response = await zohoDeskApiRequest(this, options);
 
                 for (const ticket of (response.data as IDataObject[]) || []) {
                   // Add source indicator for 'all' type
@@ -2878,7 +2845,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            await this.helpers.requestOAuth2.call(this, 'zohoDeskOAuth2Api', options);
+            await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: { success: true, ticketId },
@@ -2913,11 +2880,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -2961,11 +2924,7 @@ export class ZohoDesk implements INodeType {
                 json: true,
               };
 
-              const response = await this.helpers.requestOAuth2.call(
-                this,
-                'zohoDeskOAuth2Api',
-                options,
-              );
+              const response = await zohoDeskApiRequest(this, options);
 
               threads = (response.data as IDataObject[]) || [];
             }
@@ -2982,11 +2941,7 @@ export class ZohoDesk implements INodeType {
                     json: true,
                   };
 
-                  const fullThread = await this.helpers.requestOAuth2.call(
-                    this,
-                    'zohoDeskOAuth2Api',
-                    threadOptions,
-                  );
+                  const fullThread = await zohoDeskApiRequest(this, threadOptions);
 
                   // Extract clean text from HTML content (strips quoted email history)
                   const htmlContent = (fullThread as IDataObject).content as string;
@@ -3050,11 +3005,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3073,11 +3024,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3122,11 +3069,7 @@ export class ZohoDesk implements INodeType {
                 json: true,
               };
 
-              const response = await this.helpers.requestOAuth2.call(
-                this,
-                'zohoDeskOAuth2Api',
-                options,
-              );
+              const response = await zohoDeskApiRequest(this, options);
 
               for (const contact of (response.data as IDataObject[]) || []) {
                 returnData.push({
@@ -3158,11 +3101,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3182,7 +3121,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            await this.helpers.requestOAuth2.call(this, 'zohoDeskOAuth2Api', options);
+            await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: { success: true, contactId },
@@ -3215,11 +3154,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3238,11 +3173,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3287,11 +3218,7 @@ export class ZohoDesk implements INodeType {
                 json: true,
               };
 
-              const response = await this.helpers.requestOAuth2.call(
-                this,
-                'zohoDeskOAuth2Api',
-                options,
-              );
+              const response = await zohoDeskApiRequest(this, options);
 
               for (const account of (response.data as IDataObject[]) || []) {
                 returnData.push({
@@ -3323,11 +3250,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            const response = await this.helpers.requestOAuth2.call(
-              this,
-              'zohoDeskOAuth2Api',
-              options,
-            );
+            const response = await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: response,
@@ -3347,7 +3270,7 @@ export class ZohoDesk implements INodeType {
               json: true,
             };
 
-            await this.helpers.requestOAuth2.call(this, 'zohoDeskOAuth2Api', options);
+            await zohoDeskApiRequest(this, options);
 
             returnData.push({
               json: { success: true, accountId },

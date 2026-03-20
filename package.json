@@ -1,8 +1,17 @@
 {
   "name": "n8n-nodes-zoho-desk-edgeuno",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "n8n community node for Zoho Desk",
+  "author": "EdgeUno",
   "license": "MIT",
+  "homepage": "https://github.com/edgeuno/n8n-nodes-zoho-desk#readme",
+  "bugs": {
+    "url": "https://github.com/edgeuno/n8n-nodes-zoho-desk/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edgeuno/n8n-nodes-zoho-desk.git"
+  },
   "keywords": [
     "n8n-community-node-package",
     "n8n",
@@ -13,8 +22,10 @@
     "dist"
   ],
   "main": "dist/nodes/ZohoDesk/ZohoDesk.node.js",
+  "types": "dist/nodes/ZohoDesk/ZohoDesk.node.d.ts",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "clean": "rm -rf dist",
@@ -22,7 +33,9 @@
     "build": "npm run clean && tsc && npm run copy:assets",
     "dev": "tsc --watch",
     "lint": "eslint nodes credentials --ext .ts",
-    "lintfix": "eslint nodes credentials --ext .ts --fix"
+    "lintfix": "eslint nodes credentials --ext .ts --fix",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run lint"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,

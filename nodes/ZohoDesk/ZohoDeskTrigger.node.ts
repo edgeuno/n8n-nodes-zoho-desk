@@ -8,11 +8,11 @@ import type {
   INodePropertyOptions,
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
-
-/**
- * Default Zoho Desk API base URL
- */
-const DEFAULT_BASE_URL = 'https://desk.zoho.com/api/v1';
+import {
+  getZohoDeskApiBaseUrl,
+  getZohoDeskLoadOptionsErrorMessage,
+  zohoDeskApiRequest,
+} from './GenericFunctions';
 
 /**
  * Interface for tracking poll state between executions
@@ -170,7 +170,7 @@ export class ZohoDeskTrigger implements INodeType {
         try {
           const credentials = await this.getCredentials('zohoDeskOAuth2Api');
           const orgId = credentials.orgId as string;
-          const baseUrl = (credentials.baseUrl as string | undefined) || DEFAULT_BASE_URL;
+          const baseUrl = getZohoDeskApiBaseUrl(credentials);
 
           const options = {
             method: 'GET' as const,
@@ -181,11 +181,7 @@ export class ZohoDeskTrigger implements INodeType {
             json: true,
           };
 
-          const response = await this.helpers.requestOAuth2.call(
-            this,
-            'zohoDeskOAuth2Api',
-            options,
-          );
+          const response = await zohoDeskApiRequest(this, options);
 
           if (
             !response ||
@@ -201,7 +197,13 @@ export class ZohoDeskTrigger implements INodeType {
             value: dept.id,
           }));
         } catch (error) {
-          return [];
+          const errorMessage = getZohoDeskLoadOptionsErrorMessage(error, 'departments');
+          return [
+            {
+              name: `⚠️ Error loading departments: ${errorMessage}`,
+              value: '',
+            },
+          ];
         }
       },
     },
@@ -215,7 +217,7 @@ export class ZohoDeskTrigger implements INodeType {
     // Get credentials
     const credentials = await this.getCredentials('zohoDeskOAuth2Api');
     const orgId = credentials.orgId as string;
-    const baseUrl = (credentials.baseUrl as string | undefined) || DEFAULT_BASE_URL;
+    const baseUrl = getZohoDeskApiBaseUrl(credentials);
 
     // Get workflow static data for state tracking
     const staticData = this.getWorkflowStaticData('node') as ZohoDeskPollState;
@@ -304,11 +306,7 @@ export class ZohoDeskTrigger implements INodeType {
         json: true,
       };
 
-      const response = await this.helpers.requestOAuth2.call(
-        this,
-        'zohoDeskOAuth2Api',
-        requestOptions,
-      );
+      const response = await zohoDeskApiRequest(this, requestOptions);
 
       // Check for Zoho API error response
       if (response && typeof response === 'object') {

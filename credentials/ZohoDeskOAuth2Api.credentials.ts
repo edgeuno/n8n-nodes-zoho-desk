@@ -70,7 +70,7 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 			required: true,
 			default: ['Desk.tickets.ALL', 'Desk.contacts.READ', 'Desk.contacts.WRITE', 'Desk.search.READ', 'Desk.basic.READ', 'Desk.settings.READ'],
 			description:
-				'Select the OAuth scopes required by your workflows. You can select multiple scopes.',
+				'Select the OAuth scopes required by your workflows. Include Desk.basic.READ or Desk.settings.READ to load departments and teams.',
 			options: [
 				{
 					name: 'Desk.tickets.ALL',
@@ -268,7 +268,7 @@ export class ZohoDeskOAuth2Api implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				Authorization: '=Bearer {{$credentials.oauthTokenData.access_token}}',
+				Authorization: '=Zoho-oauthtoken {{$credentials.oauthTokenData.access_token}}',
 			},
 		},
 	};
